@@ -3,7 +3,6 @@ const remote_users = document.getElementById('remote');
 const start_room = documents.getElementById('start_room');
 
 let local_stream;
-let remote_streams = [];
 let socket;
 let state = {};
 
@@ -38,9 +37,31 @@ async function init() {
     socket.onmessage = (event) => {onMessage(event);};
 }
 
+// USER_LIST
 function onMessage(event) {
-    console.log(event);
     let message = JSON.parse(event.data);
+    console.log(message);
+
+    switch(message.type) {
+        case "USER_LIST":
+            // update for efficiency later
+            let list = document.getElementById('remote_list');
+            while(list.firstChild) {
+                list.removeChild(list.firstChild);
+            }
+
+            message.names.forEach(function(curr_name) {
+                let item = document.createElement('li');
+                item.appendChild(document.createTextNode(curr_name));
+                item.addEventListener('click', addToCall, false);
+                list.appendChild(item);
+
+                if(curr_name !== state.name) {
+                    state.users[curr_name].name = curr_name;
+                }
+            });
+            break;
+    }
 }
 
 function join() {
@@ -57,4 +78,11 @@ function join() {
       body: JSON.stringify(body),
     })
     .then((response) => response.json());
+}
+
+function addToCall(event) {
+    let clicked_user = event.target.textContent;
+    if(clicked_user !== state.name) {
+        
+    }
 }

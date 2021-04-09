@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      html,
+      body {
+        text-align: center;
+        background-color: rgb(66, 49, 82);
+      }
+      header {
+        font: small-caps bold 24px/1 sans-serif;
+        color: rgb(199, 135, 231);
+      }
+      video {
+        margin: 1em;
+        height: 240px;
+        border: 1px solid rgb(199, 135, 231);
+      }
+    </style>
+
+    <title>Video Wander</title>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="client.js"></script>
+  </head>
+
+  <header><h2>Video Wander</h2></header>
+  <body onload="init()"></body>
+</html>

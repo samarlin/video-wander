@@ -1,57 +1,73 @@
-const express = require("express");
-const room = require("./room.js");
+const static = require("node-static");
+const http = require("http");
+const app = http
+  .createServer(function (req, res) {
+    file.serve(req, res);
+  })
+  .listen(3000);
+const file = new static.Server(app);
+const io = require("socket.io")(app);
 
-const app = express();
-const WebSocket = require("ws");
-
-const cors = require("cors");
-const body_parser = require("body-parser");
-const http = require("http").createServer(app);
-const wss = new WebSocket.Server({ server: http, port: 9000 });
-
-const port = 3000;
-app.use(cors());
-app.use(body_parser.json());
-
-let vidroom;
-let state = {
-    users: {},
-};
-
-wss.on('connection', function connection(ws) {
-    ws.on('message', function incoming(msg) {
-        let message = JSON.parse(msg);
-        if (message.type === "ASSOCIATE") {
-            state.users[message.id].connection = ws;
-            
-            let users = Object.keys(state.users);
-            for (let i = 0; i < users.length; ++i) {
-                state.users[users[i]].connection.send(JSON.stringify({type: "USER_LIST", names: users}));
-            }
-        } else {
-            vidroom.onMessage(message);
-        }
-    });
-});
-
-app.post("/join-lobby", (req, res) => {
-    let body = req.body;
-    let admin = false;
-    if (Object.keys(state.users).length == 0) {
-        admin = true;
+io.sockets.on("connection", function (socket) {
+  socket.on("disconnecting", function () {
+    let id = socket.id;
+    for (let room of socket.rooms.values()) {
+      leave(room);
     }
+  });
 
-    state.users[body.name] = { admin: admin, name: body.name };
+  socket.on("join", function (config) {
+    let room = config.room;
+    let userdata = config.userdata;
 
-    res.json({ admin });
+    socket.join(room);
+    socket.userdata = userdata;
+
+    socket.emit("joinedRoom", room, socket.id);
+
+    for (let id of io.sockets.adapter.rooms.get(room).values()) {
+      io.to(id).emit("addPeer", {
+        peer_id: socket.id,
+        should_create_offer: false,
+      });
+      socket.emit("addPeer", { peer_id: id, should_create_offer: true });
+    }
+  });
+
+  function leave(room) {
+    for (let id of io.sockets.adapter.rooms.get(room).values()) {
+      io.to(id).emit("removePeer", { peer_id: socket.id });
+      socket.emit("removePeer", { peer_id: id });
+    }
+    socket.leave(room);
+  }
+  socket.on("leave", leave);
+
+  socket.on("relayICECandidate", function (config) {
+    let peer_id = config.peer_id;
+    let ice_candidate = config.ice_candidate;
+
+    io.to(peer_id).emit("iceCandidate", {
+      peer_id: socket.id,
+      ice_candidate: ice_candidate,
+    });
+  });
+
+  socket.on("relaySessionDescription", function (config) {
+    let peer_id = config.peer_id;
+    let session_description = config.session_description;
+
+    io.to(peer_id).emit("sessionDescription", {
+      peer_id: socket.id,
+      session_description: session_description,
+    });
+  });
 });
 
-app.post("/start-room", (req, res) => {
-    // start room,
-    // send message to all clients w/ room init info
-    vidroom = new room.Room(state.users);
+/*
+app.post("/create-room", (req, res) => {
 });
 
-http.listen(port, () => {
-    console.log(`Example app listening at http://localhost:${port}`);
+app.post("/join-room", (req, res) => {
 });
+*/

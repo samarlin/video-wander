@@ -16,15 +16,22 @@
         height: 240px;
         border: 1px solid rgb(199, 135, 231);
       }
+      canvas {
+        margin: 1em;
+        background-color: white;
+        border: 1px solid rgb(199, 135, 231);
+      }
     </style>
 
     <title>Video Wander</title>
 
-    <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.10.2/jquery.min.js"></script>
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="client.js"></script>
+    <script async src="/socket.io/socket.io.js"></script>
+    <script async src="client.js"></script>
   </head>
 
   <header><h2>Video Wander</h2></header>
-  <body onload="init()"></body>
+  <body onload="init()">
+    <canvas id="controller" height="250" width="400"></canvas>
+    <br />
+  </body>
 </html>

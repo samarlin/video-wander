@@ -31,6 +31,109 @@ let local_media_stream = null;
 let peers = {};
 let peer_media_elements = {};
 
+let map = document.getElementById("controller");
+let ctx = map.getContext("2d");
+
+let offsetX = map.offsetLeft;
+let offsetY = map.offsetTop;
+let startX = 0,
+  startY = 0;
+
+let pts = [
+  {
+    fill: true,
+    x: Math.floor(Math.random() * 400 - 12),
+    y: Math.floor(Math.random() * 250 - 12),
+    r: 12,
+    dt: null,
+  },
+];
+
+let selected = false;
+
+draw();
+
+function draw() {
+  ctx.clearRect(0, 0, map.clientWidth, map.height);
+  pts.forEach((pt) => {
+    ctx.beginPath();
+    ctx.arc(pt.x, pt.y, pt.r, 0, 2 * Math.PI);
+    if (pt.fill) {
+      ctx.stroke();
+      ctx.fill();
+    } else {
+      ctx.stroke();
+    }
+  });
+}
+
+function hitTest(x, y) {
+  return (
+    x >= pts[0].x - pts[0].r &&
+    x <= pts[0].x + pts[0].r &&
+    y >= pts[0].y - pts[0].r &&
+    y <= pts[0].y + pts[0].r
+  );
+}
+
+function handleMouseDown(e) {
+  e.preventDefault();
+  startX = parseInt(e.clientX - offsetX, 10);
+  startY = parseInt(e.clientY - offsetY, 10);
+
+  if (hitTest(startX, startY)) {
+    selected = true;
+  }
+}
+
+function handleMouseUp(e) {
+  e.preventDefault();
+  selected = false;
+}
+
+function handleMouseOut(e) {
+  e.preventDefault();
+  selected = false;
+}
+
+function handleMouseMove(e) {
+  if (!selected) {
+    return;
+  }
+
+  e.preventDefault();
+  let mouseX = parseInt(e.clientX - offsetX, 10);
+  let mouseY = parseInt(e.clientY - offsetY, 10);
+
+  let dx = mouseX - startX;
+  let dy = mouseY - startY;
+  startX = mouseX;
+  startY = mouseY;
+
+  let pt = pts[0];
+  pt.x += dx;
+  pt.y += dy;
+
+  let other_pts = pts.filter((pt) => pt.dt !== null);
+  other_pts.forEach((pt) => {
+    pt.dt.send(
+      JSON.stringify({
+        x: pts[0].x,
+        y: pts[0].y,
+        r: pts[0].r,
+        w: ctx.width,
+        h: ctx.height,
+      })
+    );
+  });
+  draw();
+}
+
+map.addEventListener("mousedown", handleMouseDown);
+map.addEventListener("mousemove", handleMouseMove);
+map.addEventListener("mouseup", handleMouseUp);
+map.addEventListener("mouseout", handleMouseOut);
+
 function init() {
   room = prompt("Enter room name:");
   //name = prompt("Enter your name:");
@@ -61,12 +164,6 @@ function init() {
     signaling_socket.emit("leave", room);
   }
 
-  /**
-   * When we join a group, our signaling server will send out 'addPeer' events to each pair
-   * of users in the group (creating a fully-connected graph of users, ie if there are 6 people
-   * in the room you will connect directly to the other 5, so there will be a total of 15
-   * connections in the network).
-   */
   signaling_socket.on("addPeer", function (config) {
     let peer_id = config.peer_id;
     if (peer_id in peers) {
@@ -77,6 +174,47 @@ function init() {
       { optional: [{ DtlsSrtpKeyAgreement: true }] }
     );
     peers[peer_id] = peer_connection;
+    let data_channel = peer_connection.createDataChannel("data"); // data channel for map sync
+
+    peer_connection.ondatachannel = function (event) {
+      console.log("Data channel is created!");
+
+      event.channel.onmessage = function (event) {
+        let evt = JSON.parse(event.data);
+
+        //check if already exists
+        // eventually have targets swap colors to use for map/video frame
+        // eventually use event.data.w * event.data.h to calculate location relative to resolution
+        let target = pts.filter((pt) => pt.dt === data_channel);
+        if (target.length === 0) {
+          pts.push({
+            fill: false,
+            x: evt.x,
+            y: evt.y,
+            r: 12,
+            dt: data_channel,
+          });
+        } else {
+          target[0].x = evt.x;
+          target[0].y = evt.y;
+        }
+        draw();
+      };
+
+      event.channel.onopen = function (event) {
+        let map = document.getElementById("controller");
+        let ctx = map.getContext("2d");
+        data_channel.send(
+          JSON.stringify({
+            x: pts[0].x,
+            y: pts[0].y,
+            r: pts[0].r,
+            w: ctx.width,
+            h: ctx.height,
+          })
+        );
+      };
+    };
 
     peer_connection.onicecandidate = function (event) {
       if (event.candidate) {
@@ -91,16 +229,19 @@ function init() {
     };
     peer_connection.ontrack = function ({ streams: [stream] }) {
       if (!(peer_id in peer_media_elements)) {
-        let remote_media = USE_VIDEO ? $("<video>") : $("<audio>");
-        remote_media.attr("autoplay", "autoplay");
-        remote_media.attr("playsinline", "true");
+        let remote_media = USE_VIDEO
+          ? document.createElement("video")
+          : document.createElement("audio");
+        remote_media.autoplay = true;
+        remote_media.playsinline = true;
         if (MUTE_AUDIO_BY_DEFAULT) {
-          remote_media.attr("muted", "true");
+          remote_media.muted = true;
         }
         peer_media_elements[peer_id] = remote_media;
-        $("body").append(remote_media);
+
+        document.getElementsByTagName("body")[0].append(remote_media); // append peer video
       }
-      peer_media_elements[peer_id][0].srcObject = stream;
+      peer_media_elements[peer_id].srcObject = stream;
     };
 
     for (const track of local_media_stream.getTracks()) {
@@ -173,24 +314,24 @@ function init() {
   });
 }
 
-/***********************/
-/* Local media set-up */
-/***********************/
 function setup_local_media(next) {
   if (local_media_stream !== null) {
     return;
   }
 
+  // video echoes in chrome for some reason
   navigator.mediaDevices
     .getUserMedia({ audio: USE_AUDIO, video: USE_VIDEO })
     .then(function (stream) {
       local_media_stream = stream;
-      let local_media = USE_VIDEO ? $("<video>") : $("<audio>");
-      local_media.attr("autoplay", "autoplay");
-      local_media.attr("muted", "true");
-      local_media.attr("playsinline", "true");
-      $("body").append(local_media);
-      local_media[0].srcObject = stream;
+      let local_media = USE_VIDEO
+        ? document.createElement("video")
+        : document.createElement("audio");
+      local_media.autoplay = true;
+      local_media.muted = true;
+      local_media.playsinline = true;
+      document.getElementsByTagName("body")[0].append(local_media);
+      local_media.srcObject = stream;
 
       next();
     })

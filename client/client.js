@@ -18,9 +18,7 @@ const ICE_SERVERS = [
     urls: "stun:coturn.videowander.io:5349",
   },
   {
-    urls: "turn:coturn.videowander.io:5349",
-    credential: "under2Brain",
-    username: "videowander",
+    urls: "turn:coturn.videowander.io:5349", // ?transport=tcp",
   },
 ];
 
@@ -31,11 +29,21 @@ let local_media_stream = null;
 let peers = {};
 let peer_media_elements = {};
 
+let videos = document.getElementById("videos");
+let colors = [
+  "red",
+  "blue",
+  "purple",
+  "green",
+  "orange",
+  "yellow",
+  "teal",
+  "maroon",
+];
+
 let map = document.getElementById("controller");
 let ctx = map.getContext("2d");
 
-let offsetX = map.offsetLeft;
-let offsetY = map.offsetTop;
 let startX = 0,
   startY = 0;
 
@@ -46,12 +54,12 @@ let pts = [
     y: Math.floor(Math.random() * 250 - 12),
     r: 12,
     dt: null,
+    pid: "self",
+    color: "darkslateblue",
   },
 ];
 
 let selected = false;
-
-draw();
 
 function draw() {
   ctx.clearRect(0, 0, map.clientWidth, map.height);
@@ -59,11 +67,49 @@ function draw() {
     ctx.beginPath();
     ctx.arc(pt.x, pt.y, pt.r, 0, 2 * Math.PI);
     if (pt.fill) {
+      ctx.strokeStyle = "darkslateblue";
+      ctx.fillStyle = "darkslateblue";
       ctx.stroke();
       ctx.fill();
     } else {
+      ctx.strokeStyle = pt.color;
       ctx.stroke();
     }
+  });
+
+  // now update video scales
+  // max distance: width of canvas - r*2
+  // max size 100%, min 20%
+  // within a certain radius should all just be max size
+  // order video elements by distance or scale
+  let sorted = [];
+  pts.forEach((pt) => {
+    sorted.push([
+      pt.pid,
+      Math.sqrt((pts[0].x - pt.x) ** 2 + (pts[0].y - pt.y) ** 2),
+    ]);
+
+    // update frame colors
+    peer_media_elements[pt.pid].style.borderColor = pt.color;
+  });
+  sorted.sort(function (a, b) {
+    return a[1] - b[1];
+  });
+
+  let col = 1,
+    row = 1;
+  sorted.forEach((pt) => {
+    peer_media_elements[pt[0]].style.gridArea = `${row} / ${col}`;
+    col++;
+    if (col > 3) {
+      col = 1;
+      row++;
+    }
+
+    let max_w = Math.sqrt(map.width ** 2 + map.height ** 2);
+    max_w += max_w * 0.2;
+    let scale = 1 - pt[1] / max_w;
+    peer_media_elements[pt[0]].style.transform = `scale(${scale})`;
   });
 }
 
@@ -78,8 +124,8 @@ function hitTest(x, y) {
 
 function handleMouseDown(e) {
   e.preventDefault();
-  startX = parseInt(e.clientX - offsetX, 10);
-  startY = parseInt(e.clientY - offsetY, 10);
+  startX = e.layerX;
+  startY = e.layerY;
 
   if (hitTest(startX, startY)) {
     selected = true;
@@ -102,8 +148,8 @@ function handleMouseMove(e) {
   }
 
   e.preventDefault();
-  let mouseX = parseInt(e.clientX - offsetX, 10);
-  let mouseY = parseInt(e.clientY - offsetY, 10);
+  let mouseX = e.layerX;
+  let mouseY = e.layerY;
 
   let dx = mouseX - startX;
   let dy = mouseY - startY;
@@ -121,8 +167,8 @@ function handleMouseMove(e) {
         x: pts[0].x,
         y: pts[0].y,
         r: pts[0].r,
-        w: ctx.width,
-        h: ctx.height,
+        w: map.width,
+        h: map.height,
       })
     );
   });
@@ -193,11 +239,18 @@ function init() {
             y: evt.y,
             r: 12,
             dt: data_channel,
+            pid: peer_id,
+            color: colors.pop(),
           });
         } else {
           target[0].x = evt.x;
           target[0].y = evt.y;
         }
+        draw();
+      };
+
+      event.channel.onclose = function (event) {
+        pts = pts.filter((pt) => pt.dt !== data_channel);
         draw();
       };
 
@@ -209,8 +262,8 @@ function init() {
             x: pts[0].x,
             y: pts[0].y,
             r: pts[0].r,
-            w: ctx.width,
-            h: ctx.height,
+            w: map.width,
+            h: map.height,
           })
         );
       };
@@ -239,7 +292,7 @@ function init() {
         }
         peer_media_elements[peer_id] = remote_media;
 
-        document.getElementsByTagName("body")[0].append(remote_media); // append peer video
+        document.getElementById("videos").append(remote_media); // append peer video
       }
       peer_media_elements[peer_id].srcObject = stream;
     };
@@ -296,13 +349,18 @@ function init() {
 
   signaling_socket.on("iceCandidate", function (config) {
     let peer = peers[config.peer_id];
+
     let ice_candidate = config.ice_candidate;
-    peer.addIceCandidate(new RTCIceCandidate(ice_candidate));
+    let ice_pr = peer.addIceCandidate(new RTCIceCandidate(ice_candidate));
+    ice_pr.catch((error) => {
+      console.log(error);
+    });
   });
 
   signaling_socket.on("removePeer", function (config) {
     let peer_id = config.peer_id;
     if (peer_id in peer_media_elements) {
+      colors.push(peer_media_elements[peer_id].style.borderColor);
       peer_media_elements[peer_id].remove();
     }
     if (peer_id in peers) {
@@ -311,6 +369,7 @@ function init() {
 
     delete peers[peer_id];
     delete peer_media_elements[config.peer_id];
+    draw(); // recalculate order
   });
 }
 
@@ -330,9 +389,11 @@ function setup_local_media(next) {
       local_media.autoplay = true;
       local_media.muted = true;
       local_media.playsinline = true;
-      document.getElementsByTagName("body")[0].append(local_media);
+      peer_media_elements["self"] = local_media;
+      document.getElementById("videos").append(local_media);
       local_media.srcObject = stream;
 
+      draw();
       next();
     })
     .catch(function (error) {

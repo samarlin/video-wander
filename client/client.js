@@ -19,6 +19,8 @@ const ICE_SERVERS = [
   },
   {
     urls: "turn:coturn.videowander.io:5349", // ?transport=tcp",
+    username: "coturn",
+    credential: "under2Brain",
   },
 ];
 
@@ -31,14 +33,17 @@ let peer_media_elements = {};
 
 let videos = document.getElementById("videos");
 let colors = [
-  "red",
-  "blue",
-  "purple",
-  "green",
+  "tomato",
+  "cornflowerblue",
+  "cadetblue",
+  "darkolivegreen",
   "orange",
-  "yellow",
-  "teal",
-  "maroon",
+  "goldenrod",
+  "mediumaquamarine",
+  "indianred",
+  "lightcoral",
+  "palevioletred",
+  "chocolate",
 ];
 
 let map = document.getElementById("controller");
@@ -49,7 +54,7 @@ let startX = 0,
 
 let pts = [
   {
-    fill: true,
+    fill: false,
     x: Math.floor(Math.random() * 400 - 12),
     y: Math.floor(Math.random() * 250 - 12),
     r: 12,
@@ -67,8 +72,8 @@ function draw() {
     ctx.beginPath();
     ctx.arc(pt.x, pt.y, pt.r, 0, 2 * Math.PI);
     if (pt.fill) {
-      ctx.strokeStyle = "darkslateblue";
-      ctx.fillStyle = "darkslateblue";
+      ctx.strokeStyle = pt.color;
+      ctx.fillStyle = pt.color;
       ctx.stroke();
       ctx.fill();
     } else {
@@ -96,15 +101,8 @@ function draw() {
     return a[1] - b[1];
   });
 
-  let col = 1,
-    row = 1;
-  sorted.forEach((pt) => {
-    peer_media_elements[pt[0]].style.gridArea = `${row} / ${col}`;
-    col++;
-    if (col > 3) {
-      col = 1;
-      row++;
-    }
+  sorted.forEach((pt, idx) => {
+    peer_media_elements[pt[0]].style.order = `${idx}`;
 
     let max_w = Math.sqrt(map.width ** 2 + map.height ** 2);
     max_w += max_w * 0.2;
@@ -223,18 +221,15 @@ function init() {
     let data_channel = peer_connection.createDataChannel("data"); // data channel for map sync
 
     peer_connection.ondatachannel = function (event) {
-      console.log("Data channel is created!");
-
       event.channel.onmessage = function (event) {
         let evt = JSON.parse(event.data);
 
         //check if already exists
-        // eventually have targets swap colors to use for map/video frame
         // eventually use event.data.w * event.data.h to calculate location relative to resolution
         let target = pts.filter((pt) => pt.dt === data_channel);
         if (target.length === 0) {
           pts.push({
-            fill: false,
+            fill: true,
             x: evt.x,
             y: evt.y,
             r: 12,
@@ -285,8 +280,8 @@ function init() {
         let remote_media = USE_VIDEO
           ? document.createElement("video")
           : document.createElement("audio");
-        remote_media.autoplay = true;
-        remote_media.playsinline = true;
+        remote_media.setAttribute("autoplay", "");
+        remote_media.setAttribute("playsinline", "");
         if (MUTE_AUDIO_BY_DEFAULT) {
           remote_media.muted = true;
         }
@@ -360,7 +355,10 @@ function init() {
   signaling_socket.on("removePeer", function (config) {
     let peer_id = config.peer_id;
     if (peer_id in peer_media_elements) {
-      colors.push(peer_media_elements[peer_id].style.borderColor);
+      let idx = pts.findIndex((obj) => obj.pid === peer_id);
+      colors.push(pts[idx].color);
+
+      pts.splice(idx, 1);
       peer_media_elements[peer_id].remove();
     }
     if (peer_id in peers) {
@@ -386,9 +384,12 @@ function setup_local_media(next) {
       let local_media = USE_VIDEO
         ? document.createElement("video")
         : document.createElement("audio");
-      local_media.autoplay = true;
-      local_media.muted = true;
-      local_media.playsinline = true;
+
+      local_media.setAttribute("autoplay", "");
+      local_media.setAttribute("playsinline", "");
+      // dynamic setting of muted tag doesn't work in chrome for some reason so...
+      local_media.setAttribute("oncanplay", "this.muted=true");
+
       peer_media_elements["self"] = local_media;
       document.getElementById("videos").append(local_media);
       local_media.srcObject = stream;

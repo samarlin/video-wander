@@ -5,37 +5,41 @@
       html,
       body {
         text-align: center;
-        background-color: rgb(66, 49, 82);
+        background-color: rgb(248, 236, 255);
       }
       header {
         font: small-caps bold 24px/1 sans-serif;
-        color: rgb(199, 135, 231);
+        color: darkslateblue;
       }
       video {
         margin: 1em;
         height: 240px;
-        border: 2px solid rgb(199, 135, 231);
+        border: 2px solid darkslateblue;
       }
       canvas {
         margin: 1em;
         background-color: white;
-        border: 1px solid rgb(199, 135, 231);
+        border: 2px solid darkslateblue;
       }
 
       #videos {
-        width: 70%;
+        width: 80%;
         margin-left: auto;
         margin-right: auto;
 
-        display: grid;
-        grid-template-columns: auto auto auto;
-        gap: 0px 0px;
+        display: flex;
+        justify-content: center;
+        flex-wrap: wrap;
       }
     </style>
 
     <title>Video Wander</title>
 
-    <script async src="/socket.io/socket.io.js"></script>
+    <script
+      src="https://cdn.socket.io/4.1.2/socket.io.min.js"
+      integrity="sha384-toS6mmwu70G0fw54EGlWWeA4z3dyJ+dlXBtSURSKN4vyRFOcxd3Bzjj/AoOwY+Rg"
+      crossorigin="anonymous"
+    ></script>
     <script async src="client.js"></script>
   </head>
 

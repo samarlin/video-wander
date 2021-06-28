@@ -36,13 +36,13 @@ let colors = [
   "tomato",
   "cornflowerblue",
   "cadetblue",
+  "indianred",
+  "lightcoral",
+  "palevioletred",
   "darkolivegreen",
   "orange",
   "goldenrod",
   "mediumaquamarine",
-  "indianred",
-  "lightcoral",
-  "palevioletred",
   "chocolate",
 ];
 
@@ -107,7 +107,7 @@ function draw() {
     let max_w = Math.sqrt(map.width ** 2 + map.height ** 2);
     max_w += max_w * 0.2;
     let scale = 1 - pt[1] / max_w;
-    peer_media_elements[pt[0]].style.transform = `scale(${scale})`;
+    peer_media_elements[pt[0]].style.height = `${scale * 240}px`;
   });
 }
 
